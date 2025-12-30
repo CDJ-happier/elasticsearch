@@ -1,0 +1,3 @@
+# 使用本地 JDK，跳过自动下载
+org.gradle.java.installations.auto-download=false
+org.gradle.java.installations.auto-detect=true
