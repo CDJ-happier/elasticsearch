@@ -12,7 +12,7 @@ set -euo pipefail
 # we can use 'esctl' to manage the cluster
 # SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_DIR="/data1/elk/elasticsearch/dev-utils"
-ES_INSTALL_DIR="$(cd "${SCRIPT_DIR}/../build/distribution/local/elasticsearch-8.16.1-SNAPSHOT" && pwd)"
+ES_INSTALL_DIR="$(cd "${SCRIPT_DIR}/../build/distribution/local/elasticsearch-8.17.11-SNAPSHOT" && pwd)"
 ES_BASE_DIR="$(cd "${SCRIPT_DIR}/../dev-utils" && pwd)"
 CONFIG_DIR="${ES_BASE_DIR}/config"
 CLUSTERS_CONFIG_DIR="${CONFIG_DIR}/clusters"

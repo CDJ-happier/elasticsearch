@@ -1,0 +1,18 @@
+# Default JVM configuration for cluster es-debug
+# G1GC settings
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=200
+-XX:+DisableExplicitGC
+-XX:+AlwaysPreTouch
+
+# Basic settings
+-Xss1m
+-Djava.awt.headless=true
+-Dfile.encoding=UTF-8
+-Djna.nosys=true
+-Dio.netty.noUnsafe=true
+-Dio.netty.noKeySetOptimization=true
+-Dio.netty.recycler.maxCapacityPerThread=0
+-Dlog4j.shutdownHookEnabled=false
+-Dlog4j2.disable.jmx=true
+-Djava.io.tmpdir=${ES_TMPDIR}

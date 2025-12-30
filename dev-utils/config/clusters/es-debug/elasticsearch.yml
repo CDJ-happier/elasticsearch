@@ -1,0 +1,16 @@
+# Elasticsearch configuration for es-debug
+cluster.name: es-debug
+# network settings
+network.host: 0.0.0.0
+# xpack settings
+xpack.security.enabled: false
+xpack.security.enrollment.enabled: false
+xpack.security.http.ssl.enabled: false
+xpack.security.transport.ssl.enabled: false
+# allow CORS request form http://localhost:5173
+http.cors.enabled: true
+http.cors.allow-origin: "http://localhost:5173"
+
+# Discovery settings
+discovery.seed_hosts: ["127.0.0.1:9300", "127.0.0.1:9301", "127.0.0.1:9302"]
+cluster.initial_master_nodes: ["es-debug-node1", "es-debug-node2", "es-debug-node3"]

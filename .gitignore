@@ -1,4 +1,8 @@
 
+dev-utils/data
+dev-utils/logs
+dev-utils/pids
+
 # intellij files
 .idea/
 *.iml

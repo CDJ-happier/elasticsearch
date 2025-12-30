@@ -1,0 +1,13 @@
+# Configuration for es-debug-node2
+cluster.name: es-debug
+node.name: es-debug-node2
+node.roles: [master, data, ingest]
+
+# Network settings
+network.host: 0.0.0.0
+http.port: 31921
+transport.port: 9301
+
+# Path settings
+path.data: /data1/elk/elasticsearch/dev-utils/data/es-debug/es-debug-node2
+path.logs: /data1/elk/elasticsearch/dev-utils/logs/es-debug/es-debug-node2
