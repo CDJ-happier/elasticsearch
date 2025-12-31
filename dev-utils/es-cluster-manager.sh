@@ -89,9 +89,11 @@ Examples:
   ./es-cluster-manager.sh init my-cluster -n 3 -t dev -j 1g
   ./es-cluster-manager.sh start my-cluster
   ./es-cluster-manager.sh start my-cluster --nodes 1,2  # Start only nodes 1 and 2
+  ./es-cluster-manager.sh stop my-cluster
+  ./es-cluster-manager.sh stop my-cluster --nodes 1,2  # Stop only nodes 1 and 2
+  ./es-cluster-manager.sh stop my-cluster --force
   ./es-cluster-manager.sh status my-cluster
   ./es-cluster-manager.sh add-node my-cluster
-  ./es-cluster-manager.sh stop my-cluster --force
   ./es-cluster-manager.sh list
 EOF
 }
@@ -444,7 +446,7 @@ start_cluster() {
 stop_cluster() {
     local cluster_name="$1"
     local specific_nodes="${2:-}"
-    local force="${FORCE:-false}"
+    local force="${3:-false}"
 
     local pid_file="${ES_BASE_DIR}/pids/${cluster_name}.pids"
     if [ ! -f "$pid_file" ]; then
@@ -456,6 +458,7 @@ stop_cluster() {
 
     local stopped_count=0
     local total_count=0
+    local filtered_count=0
 
     # Build list of nodes to stop
     local nodes_to_stop=()
@@ -463,6 +466,14 @@ stop_cluster() {
         IFS=',' read -ra nodes_to_stop <<< "$specific_nodes"
     fi
 
+    # First, count total nodes in PID file
+    while IFS=':' read -r pid node_name http_port; do
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            total_count=$((total_count + 1))
+        fi
+    done < "$pid_file"
+
+    # Reset file pointer and process nodes
     while IFS=':' read -r pid node_name http_port; do
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
             # Check if we should stop this node
@@ -477,7 +488,6 @@ stop_cluster() {
                 [ "$should_stop" = false ] && continue
             fi
 
-            total_count=$((total_count + 1))
             log_info "Stopping node $node_name (PID: $pid)..."
 
             if [ "$force" = "true" ]; then
@@ -508,12 +518,29 @@ stop_cluster() {
         fi
     done < "$pid_file"
 
-    # Clean up PID file if all nodes stopped
-    if [ -z "$specific_nodes" ] || [ "$stopped_count" -eq "$total_count" ]; then
+    # Update PID file when stopping specific nodes
+    if [ -n "$specific_nodes" ] && [ "$stopped_count" -gt 0 ]; then
+        # Create temporary file to store running nodes
+        local temp_pid_file="${pid_file}.tmp"
+        > "$temp_pid_file"
+
+        # Read original PID file and keep only running nodes
+        while IFS=':' read -r pid node_name http_port; do
+            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+                echo "${pid}:${node_name}:${http_port}" >> "$temp_pid_file"
+            fi
+        done < "$pid_file"
+
+        # Replace original PID file with updated one
+        mv "$temp_pid_file" "$pid_file"
+    fi
+
+    # Clean up PID file only when stopping all nodes
+    if [ -z "$specific_nodes" ] && [ "$stopped_count" -eq "$total_count" ]; then
         rm -f "$pid_file"
     fi
 
-    log_success "Stopped $stopped_count/$total_count nodes for cluster '$cluster_name'"
+    log_success "Stopped $stopped_count/$filtered_count nodes for cluster '$cluster_name'"
 }
 
 # Check cluster status
