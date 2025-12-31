@@ -1,0 +1,12 @@
+# Configuration for es-node1
+cluster.name: es
+node.name: es-node1
+node.roles: [master, data, ingest]
+
+# Network settings
+http.port: 31920
+transport.port: 9300
+
+# Path settings
+path.data: /data1/elk/elasticsearch/dev-utils/data/es/es-node1
+path.logs: /data1/elk/elasticsearch/dev-utils/logs/es/es-node1

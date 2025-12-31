@@ -1,4 +1,4 @@
-# Default JVM configuration for cluster es-debug
+# Default JVM configuration for cluster es
 # G1GC settings
 -XX:+UseG1GC
 -XX:MaxGCPauseMillis=200

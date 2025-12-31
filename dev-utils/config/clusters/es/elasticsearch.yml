@@ -1,0 +1,21 @@
+# Elasticsearch configuration for es
+cluster.name: es
+# network settings
+network.host: 0.0.0.0
+# xpack settings
+xpack.security.enabled: true
+xpack.security.enrollment.enabled: false
+xpack.security.http.ssl.enabled: false
+xpack.security.transport.ssl.enabled: true
+# allow CORS request form http://localhost:5173
+http.cors.enabled: true
+http.cors.allow-origin: "http://localhost:5173"
+
+# Discovery settings
+discovery.seed_hosts: ["127.0.0.1:9300", "127.0.0.1:9301", "127.0.0.1:9302"]
+cluster.initial_master_nodes: ["es-node1", "es-node2", "es-node3"]
+
+# SSL Certificate Configuration
+xpack.security.transport.ssl.keystore.path: certs/elastic-certificates.p12
+xpack.security.transport.ssl.truststore.path: certs/elastic-certificates.p12
+xpack.security.transport.ssl.verification_mode: certificate
