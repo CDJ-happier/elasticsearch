@@ -1,0 +1,20 @@
+/.buildkite/
+/.github/
+/.ci/
+/.idea/
+/.gradle/
+
+/build/
+/client/
+/gradle/
+/test/
+/build-conventions/
+/build-tools/
+/build-tools-internal/
+/benchmarks/
+/docs-mdx/
+/license/
+/rest-api-sepc/
+
+build/ # /doc/build也会被忽略
+

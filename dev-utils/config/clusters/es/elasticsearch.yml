@@ -13,7 +13,7 @@ http.cors.allow-origin: "http://localhost:5173"
 
 # Discovery settings
 discovery.seed_hosts: ["127.0.0.1:9300", "127.0.0.1:9301", "127.0.0.1:9302"]
-cluster.initial_master_nodes: ["es-node1", "es-node2", "es-node3"]
+# cluster.initial_master_nodes: ["es-node1", "es-node2", "es-node3"] # should remove or comment after first cluster bootstrap
 
 # SSL Certificate Configuration
 xpack.security.transport.ssl.keystore.path: certs/elastic-certificates.p12

@@ -1,12 +1,12 @@
 # JVM configuration for es-node3
--Xms2g
--Xmx2g
+-Xms4g
+-Xmx4g
 
 # Memory dump settings
 -XX:+HeapDumpOnOutOfMemoryError
 -XX:HeapDumpPath=/data1/elk/elasticsearch/dev-utils/logs/es/es-node3
 
 # GC logging
--Xlog:gc*,gc+age=trace,safepoint:file=/data1/elk/elasticsearch/dev-utils/logs/es/es-node3/gc.log:utctime,pid,tags:filecount=32,filesize=64m
+-Xlog:gc*,gc+age=trace,safepoint:file=/data1/elk/elasticsearch/dev-utils/logs/es/es-node3/gc.log:time,pid,tags:filecount=32,filesize=64m
 # for debugging
 -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5007

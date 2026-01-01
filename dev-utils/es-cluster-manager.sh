@@ -232,7 +232,7 @@ EOF
 -XX:HeapDumpPath=${ES_BASE_DIR}/logs/${cluster_name}/${node_name}
 
 # GC logging
--Xlog:gc*,gc+age=trace,safepoint:file=${ES_BASE_DIR}/logs/${cluster_name}/${node_name}/gc.log:utctime,pid,tags:filecount=32,filesize=64m
+-Xlog:gc*,gc+age=trace,safepoint:file=${ES_BASE_DIR}/logs/${cluster_name}/${node_name}/gc.log:time,pid,tags:filecount=32,filesize=64m
 # for debugging
 -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=${debug_port}
 EOF
@@ -319,7 +319,7 @@ http.cors.allow-origin: "http://localhost:5173"
 
 # Discovery settings
 discovery.seed_hosts: [${seed_hosts}]
-cluster.initial_master_nodes: [${master_nodes}]
+cluster.initial_master_nodes: [${master_nodes}] # should remove or comment after first cluster bootstrapped
 EOF
 
     # Copy necessary configuration files

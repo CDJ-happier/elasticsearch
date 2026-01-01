@@ -24,9 +24,9 @@ source "$HOME/.sdkman/bin/sdkman-init.sh"
 sdk install java 23.0.2-zulu
 sdk use java 23.0.2-zulu
 
-# 3. 配置环境变量
-export JAVA_HOME=$HOME/.sdkman/candidates/java/23.0.2-zulu
-export PATH=$JAVA_HOME/bin:$PATH
+# 3. 验证环境变量（sdk use 会自动设置）
+echo $JAVA_HOME  # 应该输出: /home/xxx/.sdkman/candidates/java/23.0.2-zulu
+java -version    # 应该显示: openjdk version "23.0.2"
 ```
 
 ---
@@ -149,12 +149,20 @@ vim gradle/verification-metadata.xml
 # 清理之前的构建
 ./gradlew clean
 
-# 设置环境变量
-export JAVA_HOME=$HOME/.sdkman/candidates/java/23.0.2-zulu
+# 激活 JDK 23（sdkman 会自动设置 JAVA_HOME）
+sdk use java 23.0.2-zulu
+
+# 验证 JAVA_HOME 是否正确（可选）
+echo $JAVA_HOME
 
 # 开始编译
 ./gradlew localDistro
 ```
+
+**💡 说明**：
+- `sdk use` 命令会自动设置 `JAVA_HOME` 和 `PATH`
+- 如果在新终端或脚本中执行，可以显式设置：`export JAVA_HOME=$HOME/.sdkman/candidates/java/23.0.2-zulu`
+- 或者将 `sdk use java 23.0.2-zulu` 添加到 `~/.bashrc` 中自动激活
 
 ### 步骤 4: 验证编译结果
 ```bash
@@ -226,6 +234,20 @@ elasticsearch-8.17.11-SNAPSHOT/
 ---
 
 ## 🚀 快速启动
+
+### 环境准备
+```bash
+# 方式 1: 使用 sdkman（推荐）
+sdk use java 23.0.2-zulu  # 自动设置 JAVA_HOME 和 PATH
+
+# 方式 2: 手动设置（适用于脚本或 CI/CD）
+export JAVA_HOME=$HOME/.sdkman/candidates/java/23.0.2-zulu
+export PATH=$JAVA_HOME/bin:$PATH
+
+# 验证环境
+echo "JAVA_HOME: $JAVA_HOME"
+java -version
+```
 
 ### 编译命令
 ```bash
