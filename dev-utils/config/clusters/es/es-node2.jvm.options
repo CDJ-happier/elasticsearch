@@ -2,6 +2,9 @@
 -Xms4g
 -Xmx4g
 
+# Timezone settings
+-Duser.timezone=Asia/Shanghai
+
 # Memory dump settings
 -XX:+HeapDumpOnOutOfMemoryError
 -XX:HeapDumpPath=/data1/elk/elasticsearch/dev-utils/logs/es/es-node2

@@ -57,6 +57,10 @@ MasterService在Elasticsearch生态系统中扮演着关键角色：
 - **状态发布器**：负责将集群状态变更发布到所有节点
 - **性能监控器**：跟踪集群状态更新的性能指标
 
+### 1.4 结合deepwiki codemap学习
+
+ref: https://deepwiki.com/search/814masterserivce_8e7df425-fc69-4469-a4cb-942c803df4ae
+
 ## 2. 核心架构深度解析
 
 ### 2.1 任务处理架构设计

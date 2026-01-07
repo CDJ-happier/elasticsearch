@@ -23,15 +23,15 @@ import java.io.PrintStream;
 /**
  * A container for transient state during bootstrap of the Elasticsearch process.
  *
- * <h1>类职责与设计分析</h1>
+ * <h2>类职责与设计分析</h2>
  *
- * <h2>主要职责</h2>
+ * <h3>主要职责</h3>
  * <p>
  * Bootstrap 类是 Elasticsearch 启动过程中的核心状态容器，负责管理和协调节点启动的整个生命周期。
  * 它封装了启动过程中所有的临时状态信息，包括命令行参数、安全设置、环境配置以及子进程管理等关键组件。
  * </p>
  *
- * <h2>工作机制</h2>
+ * <h3>工作机制</h3>
  * <p>
  * 该类采用<b>状态容器模式</b>，通过以下机制协调启动流程：
  * </p>
@@ -43,7 +43,7 @@ import java.io.PrintStream;
  *   <li><b>异常处理</b>：提供统一的异常退出机制，确保错误信息正确输出并优雅关闭</li>
  * </ul>
  *
- * <h2>在架构中的位置</h2>
+ * <h3>在架构中的位置</h3>
  * <p>
  * <b>所属模块</b>：bootstrap 模块（org.elasticsearch.bootstrap）<br>
  * <b>创建者</b>：由 Elasticsearch 主类在 JVM 启动时创建<br>
@@ -56,7 +56,7 @@ import java.io.PrintStream;
  *   <li>各启动阶段：通过 spawner 启动必要的子进程</li>
  * </ul>
  *
- * <h2>关键设计点</h2>
+ * <h3>关键设计点</h3>
  * <ul>
  *   <li><b>不可变性保证</b>：使用 SetOnce 包装关键状态，确保配置一旦加载就不可更改，
  *       防止启动过程中的状态污染</li>
@@ -74,7 +74,7 @@ import java.io.PrintStream;
  *   <li><b>资源清理</b>：提供 closeStreams 方法确保流资源的正确释放</li>
  * </ul>
  *
- * <h2>生命周期</h2>
+ * <h3>生命周期</h3>
  * <p>
  * Bootstrap 实例的生命周期贯穿整个启动过程，从 JVM 启动到 Node 完全初始化。
  * 一旦节点成功启动，该实例的使命即完成，其持有的临时状态将被释放或转移到 Node 实例中。

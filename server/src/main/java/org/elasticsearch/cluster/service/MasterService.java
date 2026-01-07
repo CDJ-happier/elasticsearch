@@ -99,7 +99,7 @@ public class MasterService extends AbstractLifecycleComponent {
 
     private final ClusterStateTaskExecutor<ClusterStateUpdateTask> unbatchedExecutor;
 
-    private ClusterStatePublisher clusterStatePublisher;
+    private ClusterStatePublisher clusterStatePublisher; // 最终通过该实例的publish()方法将新的ClusterState发布到集群中
     private Supplier<ClusterState> clusterStateSupplier;
 
     private final String nodeName;
@@ -114,6 +114,7 @@ public class MasterService extends AbstractLifecycleComponent {
     private volatile ExecutorService threadPoolExecutor;
     private final AtomicInteger totalQueueSize = new AtomicInteger();
     private volatile Batch currentlyExecutingBatch;
+    //每个PerPriorityQueue中装的是Batch, Batch中装的是Entry, Entry就是submitTask()时提交的任务task, 继承自ClusterStateTaskListener
     private final Map<Priority, PerPriorityQueue> queuesByPriority;
     private final LongSupplier insertionIndexSupplier = new AtomicLong()::incrementAndGet;
 
@@ -240,6 +241,7 @@ public class MasterService extends AbstractLifecycleComponent {
         }
 
         final long computationStartTime = threadPool.rawRelativeTimeInMillis();
+        // 通过执行任务计算并版本化新的集群状态
         final var newClusterState = patchVersions(
             previousClusterState,
             executeTasks(previousClusterState, executionResults, executor, summary, threadPool.getThreadContext())
@@ -249,6 +251,7 @@ public class MasterService extends AbstractLifecycleComponent {
 
         if (previousClusterState == newClusterState) {
             final long notificationStartTime = threadPool.rawRelativeTimeInMillis();
+            // 通知监听器，集群状态没有变化
             for (final var executionResult : executionResults) {
                 final var contextPreservingAckListener = executionResult.getContextPreservingAckListener();
                 if (contextPreservingAckListener != null) {
@@ -334,7 +337,7 @@ public class MasterService extends AbstractLifecycleComponent {
         } else {
             logger.debug("cluster state updated, version [{}], source [{}]", newClusterState.version(), summary);
         }
-
+        // 封装发布时间用于节点间通信
         final ClusterStatePublicationEvent clusterStatePublicationEvent = new ClusterStatePublicationEvent(
             summary,
             previousClusterState,
@@ -388,7 +391,7 @@ public class MasterService extends AbstractLifecycleComponent {
                     }
 
                     try {
-                        executor.clusterStatePublished(newClusterState);
+                        executor.clusterStatePublished(newClusterState); // 通知执行器，集群状态已发布
                     } catch (Exception e) {
                         logger.error(
                             () -> format("exception thrown while notifying executor of new cluster state publication [%s]", summary),
@@ -1030,7 +1033,7 @@ public class MasterService extends AbstractLifecycleComponent {
 
     private static <T extends ClusterStateTaskListener> ClusterState executeTasks(
         ClusterState previousClusterState,
-        List<ExecutionResult<T>> executionResults,
+        List<ExecutionResult<T>> executionResults, // 执行任务（名词）
         ClusterStateTaskExecutor<T> executor,
         BatchSummary summary,
         ThreadContext threadContext
@@ -1072,7 +1075,7 @@ public class MasterService extends AbstractLifecycleComponent {
             // to avoid leaking headers in production that were missed by tests
 
             try {
-                final var updatedState = executor.execute(
+                final var updatedState = executor.execute( // 这里就是创建BatchingTaskQueue时的executor了，具体逻辑不在此处。
                     new ClusterStateTaskExecutor.BatchExecutionContext<>(
                         previousClusterState,
                         executionResults,
@@ -1276,7 +1279,7 @@ public class MasterService extends AbstractLifecycleComponent {
                 public String toString() {
                     return "master service batch completion listener";
                 }
-            }, batchCompletionListener -> {
+            }, batchCompletionListener -> { // batchCompletionListener就是.run()的第一个参数. run(l, action) -> action.accept(l)
                 final var nextBatch = takeNextBatch();
                 assert currentlyExecutingBatch == nextBatch;
                 if (lifecycle.started()) {
@@ -1445,6 +1448,11 @@ public class MasterService extends AbstractLifecycleComponent {
      * @param <T> The type of the tasks
      *
      * @return A new batching task queue.
+     * <p>
+     * 说明：
+     * 创建一个新的指定优先级的任务队列。返回一个BatchingTaskQueue对象，可以通过.submit()方法提交任务。因为MasterService执行的任务
+     * 都是与集群状态更改与发布相关的，这里指定了任务的执行入口this::executeAndPublishBatch()。我理解后续提交的任务会与executor绑定，
+     * 然后executeAndPublishBatch()TODO
      */
     public <T extends ClusterStateTaskListener> MasterServiceTaskQueue<T> createTaskQueue(
         String name,
@@ -1453,10 +1461,10 @@ public class MasterService extends AbstractLifecycleComponent {
     ) {
         return new BatchingTaskQueue<>(
             name,
-            this::executeAndPublishBatch,
+            this::executeAndPublishBatch, // 实现了BatchConsumer接口，用于执行Batch，也就是添加到该BatchingTaskQueue的任务Task
             insertionIndexSupplier,
             queuesByPriority.get(priority),
-            executor,
+            executor, // 作为this::executeAndPublishBatch的第一个参数传入 -> executeTasks() -> innerExecuteTasks() -> executor.execute(tasks)
             threadPool
         );
     }
@@ -1593,22 +1601,24 @@ public class MasterService extends AbstractLifecycleComponent {
                     return;
                 }
             } else {
-                timeoutCancellable = null;
+                timeoutCancellable = null; // 任务没有超时时间，timeoutCancellable为null
             }
-
+            // 提交的任务task封装为Entry对象，并添加到队列中（独立的queue，还不是全局的perPriorityQueue队列）
             queue.add(
                 new Entry<>(
                     source,
                     taskHolder,
                     insertionIndexSupplier.getAsLong(),
                     threadPool.relativeTimeInMillis(),
-                    threadPool.getThreadContext().newRestorableContext(true),
+                    threadPool.getThreadContext().newRestorableContext(true), // 保存当前线程的上下文信息
                     timeoutCancellable
                 )
             );
 
+            // 如果之前队列为空，则添加一个执行器，否则不做任何处理（说明已经有执行器了）
             if (queueSize.getAndIncrement() == 0) {
-                perPriorityQueue.execute(processor);
+                // 这里的processor是BatchingTaskQueue的内部类，实现了Batch接口，用于处理队列queue中的任务Entry
+                perPriorityQueue.execute(processor); // 使用对应优先级队列的执行方法执行processor，此时processor与queue中的Entry对象绑定
             }
         }
 
@@ -1662,16 +1672,18 @@ public class MasterService extends AbstractLifecycleComponent {
                 }
             }
 
+            // 批量处理所属BatchingTaskQueue队列中的任务Entry对象
             @Override
             public void run(ActionListener<Void> listener) {
                 assert executing.isEmpty() : executing;
                 final var entryCount = queueSize.getAndSet(0);
                 var taskCount = 0;
+                // 将BatchingTaskQueue中的Entry对象封装为ExecutionResult对象，并添加到tasks列表中
                 final var tasks = new ArrayList<ExecutionResult<T>>(entryCount);
                 for (int i = 0; i < entryCount; i++) {
                     final var entry = queue.poll();
                     assert entry != null;
-                    final var task = entry.acquireForExecution();
+                    final var task = entry.acquireForExecution(); // 如果任务已过期取消，则task为null
                     if (task != null) {
                         taskCount += 1;
                         executing.add(entry);
@@ -1685,9 +1697,10 @@ public class MasterService extends AbstractLifecycleComponent {
                     return;
                 }
                 final var finalTaskCount = taskCount;
-                ActionListener.run(ActionListener.runBefore(listener, () -> {
+                ActionListener.run(ActionListener.runBefore(listener, () -> { // 再回调listener之前，先执行runBefore方法的第二个参数
                     assert executing.size() == finalTaskCount;
                     executing.clear();
+                    // 将批量任务tasks传递给executeAndPublishBatch方法处理
                 }), l -> batchConsumer.runBatch(executor, tasks, new BatchSummary(() -> buildTasksDescription(tasks)), l));
             }
 
