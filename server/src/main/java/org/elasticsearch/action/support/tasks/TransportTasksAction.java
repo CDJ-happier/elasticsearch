@@ -96,6 +96,8 @@ public abstract class TransportTasksAction<
             protected void sendItemRequest(String nodeId, ActionListener<NodeTasksResponse> listener) {
                 final var discoveryNode = discoveryNodes.get(nodeId);
                 if (discoveryNode == null) {
+                    // 为什么这里一个节点失败就直接调用listener的onFailure方法？
+                    // 并且，也没有通知其它Fanout动作
                     listener.onFailure(new NoSuchNodeException(nodeId));
                     return;
                 }
