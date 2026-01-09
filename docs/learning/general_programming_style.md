@@ -631,6 +631,73 @@ if (cancellableTask != null) {
 - 替换 `resultListenerCompleter` 为空操作，释放对 `this` 的引用
 - 通知所有子任务 listener，让它们快速失败
 
+##### 信号量机制的详细解释
+
+这行代码使用Java的方法引用和原子引用操作，分解如下：
+
+```java
+final var resultListenerCompleter = new AtomicReference<Runnable>(() -> {
+    if (cancellableTask != null && cancellableTask.notifyIfCancelled(resultListener)) {
+        return; // 如果任务已取消，通知resultListener并返回
+    }
+    ActionListener.completeWith(resultListener, this::onCompletion); // 否则正常完成
+});
+```
+
+在任务取消监听器中：
+```java
+resultListenerCompleter.getAndSet(semaphore::acquireUninterruptibly).run();
+```
+
+**执行过程：**
+
+1. `getAndSet(semaphore::acquireUninterruptibly)` - 原子地获取当前值，并用新值替换
+   - 获取：原来的Runnable（可能是完成resultListener的逻辑）
+   - 设置：新的`semaphore::acquireUninterruptibly`（方法引用，等价于`() -> semaphore.acquireUninterruptibly()`）
+
+2. `.run()` - 执行获取到的原来的Runnable
+
+3. `semaphore.release()` - 释放信号量
+
+**设计意图：**
+
+这里是一个**并发同步机制**，用于处理取消和正常完成之间的竞态条件：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        竞态条件处理                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  正常完成路径                    取消路径                        │
+│      │                             │                            │
+│      │  getAndSet(新的Runnable)    │                            │
+│      │  获取原Runnable并执行        │                            │
+│      ├────────────────────────────►│                            │
+│      │                             │                            │
+│      │                    getAndSet(semaphore::acquire)        │
+│      │                             │                            │
+│      │                    获取原Runnable并执行                  │
+│      │                             ├─────────────────────────► │
+│      │                             │                            │
+│      │                    acquireUninterruptibly               │
+│      │                             │ (阻塞，等待permit)          │
+│      │                             │                            │
+│      │  getAndSet(semaphore::acquire)                           │
+│      │  (此时已无原Runnable)        │                            │
+│      ├────────────────────────────►│                            │
+│      │                             │                            │
+│      │  release()                  │                            │
+│      │  (释放permit=1)             ├─────────────────────────► │
+│      │                             │                            │
+│      │                             │  acquireUninterruptibly返回 │
+│      │                             │                            │
+│      │                             │  release()                 │
+│      │                             │                            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**核心目的：** 确保在并发情况下，`resultListener`只被完成一次，并且避免在传输线程上阻塞太久。信号量提供了一个短暂的同步点，让取消路径和正常完成路径协调好。
+
 #### 3. 引用计数和完成处理
 
 ```java
@@ -672,6 +739,141 @@ public void run() {
     resultListener.addListener(listener);
 }
 ```
+
+##### RefCountingRunnable 的工作原理
+
+**执行流程：**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    RefCountingRunnable 引用计数流程              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  A. 创建 RefCountingRunnable                                    │
+│     └── 引用计数 = 1（初始引用）                                 │
+│                                                                 │
+│  B. 进入 try-with-resources 块                                 │
+│                                                                 │
+│  C. 循环遍历 items                                              │
+│     ┌─────────────────────────────────┐                         │
+│     │ itemsIterator.hasNext()?        │                         │
+│     └────────────┬────────────────────┘                         │
+│                  │                                              │
+│         是       │         否                                   │
+│          │       │          │                                   │
+│          │       │          │                                   │
+│          ▼       │          ▼                                   │
+│     ┌─────────┐ │    ┌─────────────┐                          │
+│     │refs.acquire│ │    │退出循环     │                          │
+│     └────┬────┘ │    └──────┬──────┘                          │
+│          │     │           │                                  │
+│          ▼     │           ▼                                  │
+│     引用计数++ │     退出 try-with-resources                   │
+│          │     │           │                                  │
+│          ▼     │           ▼                                  │
+│     创建item   │     refs.close()                              │
+│     ResponseListener│        │                                │
+│          │     │           │                                  │
+│          ▼     │           ▼                                  │
+│     releaseAfter│    引用计数--                                │
+│     包装listener│        │                                  │
+│          │     │           │                                  │
+│          ▼     │           ▼                                  │
+│     sendItemRequest│  引用计数 == 0?                           │
+│     (异步)    │        │                                   │
+│          │     │    ┌────┴────┐                              │
+│          │     │    │   否    │ → 等待其他item完成              │
+│          └─────┼────┴─────────┤                                │
+│                │           │是                                │
+│                │           ▼                                  │
+│                │    ┌──────────────────────┐                  │
+│                │    │SubtasksCompletionHandler.run()!          │
+│                │    ├──────────────────────┤                  │
+│                │    │1. 执行resultListenerCompleter           │
+│                │    │2. 调用onCompletion()生成最终结果         │
+│                │    │3. 完成resultListener                    │
+│                │    │4. resultListener.addListener(外部listener)│
+│                │    │5. 外部listener收到最终结果                │
+│                │    └──────────────────────┘                  │
+│                │                                                │
+│  D. 某个item完成时：                                             │
+│     listener.onResponse/onFailure 被调用                         │
+│          │                                                      │
+│          ▼                                                      │
+│     自动调用 refs.release()（由releaseAfter包装）                │
+│          │                                                      │
+│          ▼                                                      │
+│     引用计数--                                                  │
+│          │                                                      │
+│          └──→ 返回C，检查引用计数是否归零                        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**关键机制：**
+
+1. **初始引用（计数=1）：** try-with-resources创建时，RefCountingRunnable内部持有一个初始引用
+
+2. **refs.acquire()：** 每处理一个item，就获取一个引用（引用计数+1）
+
+3. **ActionListener.releaseAfter：** 创建一个包装的listener，在onResponse或onFailure后自动释放引用
+
+4. **refs.close()：** 退出try-with-resources时调用，释放初始引用（引用计数-1）
+
+5. **触发条件：** 当**所有**引用都被释放（引用计数归零）时，执行`SubtasksCompletionHandler.run()`
+
+**完整生命周期示例（3个items）：**
+
+```java
+// 1. 创建：引用计数 = 1（初始引用）
+var refs = new RefCountingRunnable(...);
+
+// 2. 处理item1：引用计数 = 2
+refs.acquire();  // item1的引用
+sendItemRequest(item1, listener1); // 异步
+
+// 3. 处理item2：引用计数 = 3
+refs.acquire();  // item2的引用
+sendItemRequest(item2, listener2); // 异步
+
+// 4. 处理item3：引用计数 = 4
+refs.acquire();  // item3的引用
+sendItemRequest(item3, listener3); // 异步
+
+// 5. 退出try-with-resources：引用计数 = 3
+refs.close(); // 释放初始引用
+
+// 6. item1完成：引用计数 = 2
+listener1.onResponse(...); // 自动释放item1的引用
+
+// 7. item2完成：引用计数 = 1
+listener2.onResponse(...); // 自动释放item2的引用
+
+// 8. item3完成：引用计数 = 0 → 触发SubtasksCompletionHandler.run()！
+listener3.onResponse(...); // 自动释放item3的引用
+```
+
+**为什么只看到refs.acquire()没有看到refs.release()？**
+
+因为`ActionListener.releaseAfter`在内部处理了释放：
+
+```java
+ActionListener.releaseAfter(itemResponseListener, refs.acquire())
+```
+
+这等价于：
+```java
+ActionListener.runAfter(itemResponseListener, refs::release)
+```
+
+当`itemResponseListener`收到响应（成功或失败）时，会先调用`itemResponseListener`的方法，然后自动调用`refs.release()`。
+
+**设计优势：**
+
+1. **无需预知item数量：** 引用计数机制可以动态适应任意数量的item
+2. **延迟完成：** 只有当所有item都完成时才触发最终回调
+3. **异常安全：** 即使某个item失败，也会正确释放引用
+4. **资源管理：** try-with-resources确保初始引用一定会被释放
 
 ### 执行流程图
 

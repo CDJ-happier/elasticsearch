@@ -94,10 +94,9 @@ public abstract class TransportTasksAction<
 
             @Override
             protected void sendItemRequest(String nodeId, ActionListener<NodeTasksResponse> listener) {
+                // 这里的listener是在FanOut中为每个item创建的ActionListener，与doExecute参数中的listener是不同的
                 final var discoveryNode = discoveryNodes.get(nodeId);
                 if (discoveryNode == null) {
-                    // 为什么这里一个节点失败就直接调用listener的onFailure方法？
-                    // 并且，也没有通知其它Fanout动作
                     listener.onFailure(new NoSuchNodeException(nodeId));
                     return;
                 }
@@ -141,7 +140,7 @@ public abstract class TransportTasksAction<
             }
 
             @Override
-            protected TasksResponse onCompletion() {
+            protected TasksResponse onCompletion() { // 这里显然会传递给doExecute参数中的listener
                 // ref releases all happen-before here so no need to be synchronized
                 return newResponse(request, taskResponses, taskOperationFailures, failedNodeExceptions);
             }
@@ -266,6 +265,9 @@ public abstract class TransportTasksAction<
             processTasks(
                 (CancellableTask) task,
                 tasksRequest,
+                // l2 = l1.delegateFailure(bc), 失败的回调还是交给l1处理，成功的则交给bc(l1, response)
+                // 像一般的listener，在成功或失败时调用对应的onResponse或onFailure方法。有时需要在成功时继续处理，就可以通过delegateFailure方法来实现
+                // 即l1.delegateFailure(bc)的语义是如果失败时委派给l1.onFailure(), 成功的话就继续调用bc(l1, l1.onResponse())
                 new ChannelActionListener<NodeTasksResponse>(channel).delegateFailure(
                     (l, tasks) -> nodeOperation((CancellableTask) task, l, tasksRequest, tasks)
                 )

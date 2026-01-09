@@ -21,7 +21,7 @@
 
 #### 分析要点：
 - **现有方案的不足**：在没有这个模块之前，开发者如何解决类似问题？存在什么痛点？
-- **具体场景**：在什么业务场景下会遇到这个问题？
+- **具体场景**：在什么场景下会遇到这个问题？
 - **问题的影响**：不解决这个问题会导致什么后果？（性能、可维护性、正确性等）
 - **为什么现有工具不够用**：为什么不能用已有的类/工具解决？
 
@@ -289,7 +289,7 @@ SubscribableListener.andThenApply(listener1, listener2, (r1, r2) -> combine(r1, 
 3. **异常处理**：订阅者应该处理所有可能的异常
 4. **避免长时间阻塞**：订阅者回调应该快速完成
 5. **测试延迟订阅**：确保结果完成后订阅仍然正常工作
-```
+
 
 ---
 
@@ -306,6 +306,7 @@ SubscribableListener.andThenApply(listener1, listener2, (r1, r2) -> combine(r1, 
 
 #### 输出示例：
 ```markdown
+
 ## 实现原理
 
 ### 核心数据结构
@@ -323,8 +324,7 @@ public class SubscribableListener<T> implements ActionListener<T> {
 ```
 
 ### 状态转换图
-
-```
+```text
 EMPTY (初始状态)
   │
   ├─ addListener() ──→ Stack<Listener> (订阅者栈)
@@ -468,7 +468,7 @@ if (currentState instanceof Result) {
 3. **类型多态**：用单个字段存储多种状态
 4. **快速失败**：重复完成立即抛异常，便于调试
 5. **异常隔离**：订阅者异常不影响其他订阅者
-```
+
 
 ---
 
