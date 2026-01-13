@@ -582,7 +582,7 @@ public abstract class Engine implements Closeable {
             this.term = UNASSIGNED_PRIMARY_TERM;
             this.failure = null;
             this.requiredMappingUpdate = requiredMappingUpdate;
-            this.resultType = Type.MAPPING_UPDATE_REQUIRED;
+            this.resultType = Type.MAPPING_UPDATE_REQUIRED; // 这里标记了需要更新映射mapping
             this.id = id;
         }
 

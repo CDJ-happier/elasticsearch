@@ -95,6 +95,7 @@ public class MetadataMappingService {
         }
     }
 
+    // 实际执行mapping更新的地方，实现了ClusterStateTaskExecutor接口，即集群状态更新任务执行器
     class PutMappingExecutor implements ClusterStateTaskExecutor<PutMappingClusterStateUpdateTask> {
         @Override
         public ClusterState execute(BatchExecutionContext<PutMappingClusterStateUpdateTask> batchExecutionContext) throws Exception {
@@ -120,7 +121,7 @@ public class MetadataMappingService {
                         taskContext.onFailure(e);
                     }
                 }
-                return currentState;
+                return currentState; // 返回新的集群状态，并触发集群状态发布（Master节点的ClusterService负责）
             } finally {
                 IOUtils.close(indexMapperServices.values());
             }

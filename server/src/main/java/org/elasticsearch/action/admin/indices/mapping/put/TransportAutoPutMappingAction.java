@@ -93,7 +93,7 @@ public class TransportAutoPutMappingAction extends AcknowledgedTransportMasterNo
             listener.onFailure(new IllegalStateException(message));
             return;
         }
-
+        // 执行mapping更新
         performMappingUpdate(concreteIndices, request, listener, metadataMappingService, true);
     }
 

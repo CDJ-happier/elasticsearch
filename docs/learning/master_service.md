@@ -67,6 +67,54 @@ ref: https://deepwiki.com/search/814masterserivce_8e7df425-fc69-4469-a4cb-942c80
 
 MasterService采用多级任务队列架构来管理不同类型的任务：
 
+```text
+第一层：PerPriorityQueue（优先级队列）
+    ├── queue: ConcurrentLinkedQueue<Batch>  // 存放的是 Batch（处理器）, Processor实例
+    └── 每个优先级一个队列
+
+第二层：BatchingTaskQueue（批处理任务队列）
+    ├── queue: ConcurrentLinkedQueue<Entry<T>>  // 存放的是具体的任务 Entry
+    └── processor: Batch（Processor 实例）
+```
+
+1. Processor 是可重用的: 每次执行完后，如果有新任务（queueSize 从 0 变为 1），会再次将同一个 Processor 添加到 PerPriorityQueue
+2. 原子计数器保证线程安全: queueSize.getAndIncrement() == 0 时才将processor添加perPriorityQueue
+3. 批处理优化: 在 Processor.run() 执行时，会一次性取出所有待处理任务, 即使在执行过程中有新任务提交，也会在下一轮批处理中执行
+
+```mermaid
+sequenceDiagram
+    participant Client as 客户端
+    participant BTQ as BatchingTaskQueue
+    participant PPQ as PerPriorityQueue
+    participant MS as MasterService
+
+    Note over BTQ: queueSize = 0
+    Client->>BTQ: submitTask(task1)
+    BTQ->>BTQ: queue.add(task1)
+    BTQ->>BTQ: queueSize++ (0→1)
+    BTQ->>PPQ: execute(processor)
+    Note over PPQ: 将 processor 加入队列
+
+    Client->>BTQ: submitTask(task2)
+    BTQ->>BTQ: queue.add(task2)
+    BTQ->>BTQ: queueSize++ (1→2)
+    Note over BTQ: queueSize != 0，不再添加 processor
+
+    MS->>PPQ: poll() 获取 processor
+    MS->>BTQ: processor.run()
+    BTQ->>BTQ: entryCount = queueSize.getAndSet(0)
+    Note over BTQ: 清空计数器，准备接收新任务
+    BTQ->>BTQ: poll task1, task2
+    BTQ->>MS: 执行 batchConsumer.runBatch()
+
+    Note over BTQ: queueSize = 0，可以接收新任务
+    Client->>BTQ: submitTask(task3)
+    BTQ->>BTQ: queue.add(task3)
+    BTQ->>BTQ: queueSize++ (0→1)
+    BTQ->>PPQ: execute(processor)
+    Note over PPQ: processor 再次被添加到队列
+```
+
 #### 2.1.1 优先级队列系统
 ```java
 // 按优先级组织的任务队列

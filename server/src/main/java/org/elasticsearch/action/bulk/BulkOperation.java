@@ -446,6 +446,7 @@ final class BulkOperation extends ActionRunnable<BulkResponse> {
         completeBulkOperation();
     }
 
+    @SuppressWarnings("checkstyle:LineLength")
     private void executeBulkShardRequest(BulkShardRequest bulkShardRequest, Releasable releaseOnFinish) {
         ShardId shardId = bulkShardRequest.shardId();
 
@@ -454,6 +455,11 @@ final class BulkOperation extends ActionRunnable<BulkResponse> {
             handleShardFailure(bulkShardRequest, clusterService.state(), shortCircuitShardFailures.get(shardId));
             releaseOnFinish.close();
         } else {
+            // TODO:
+            // 执行taskManager.registerAndExecute() -> action.execute(task, request, listener) -> TransportXXXAction.execute() -> doExecute() -> ...
+            // 顺序是：TransportReplicationAction.doExecute() -> handlePrimaryRequest() -> ReplicationOperation.execute() -> perform() ->
+            // TransportWriteAction.shardOperationOnPrimary() -> TransportShardBulkAction.dispatchedShardOperationOnPrimary()
+            // 最终执行到TransportShardBulkAction.performOnPrimary()方法。
             client.executeLocally(TransportShardBulkAction.TYPE, bulkShardRequest, new ActionListener<>() {
 
                 // Lazily get the cluster state to avoid keeping it around longer than it is needed

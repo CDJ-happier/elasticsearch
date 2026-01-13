@@ -995,8 +995,11 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
                 ifPrimaryTerm,
                 getRelativeTimeInNanos()
             );
-            Mapping update = operation.parsedDoc().dynamicMappingsUpdate();
-            if (update != null) {
+            Mapping update = operation.parsedDoc().dynamicMappingsUpdate(); // 这里应该就是动态映射的更新
+            if (update != null) { // 有动态映射的更新，这里为什么直接返回了？如果没有动态更新则会执行index(engine, operation)
+                // 即为什么这个返回分支和index()这里正常返回的分支的逻辑不对，这里没有进行index的操作逻辑。
+                // NOTE: 动态更新mapping后需要先更新集群状态，然后重试index操作 TODO: 检查如何更新集群状态并重试的
+                // 构造函数中会this.resultType = Type.MAPPING_UPDATE_REQUIRED，即标记需要更新mapping
                 return new Engine.IndexResult(update, operation.parsedDoc().id());
             }
         } catch (Exception e) {
