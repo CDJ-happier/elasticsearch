@@ -4,6 +4,8 @@
 
 **ActionListener 是 Elasticsearch 异步编程的核心组件，基于装饰器模式实现了 runBefore、runAfter、delegateFailure 等实用方法，用于在原有行为基础上增强功能。**
 
+[deepwiki ref](https://deepwiki.com/search/elasticsearchactionlistener-ac_8ab22ee1-1a59-42f1-947a-97af766db4df)
+
 ## 核心概念
 
 Elasticsearch 中的 runBefore、runAfter、delegateFailure 等方法是基于**装饰器模式（Decorator Pattern）**的函数式编程实践。它们的本质是：

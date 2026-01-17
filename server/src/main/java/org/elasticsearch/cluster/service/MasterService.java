@@ -1697,7 +1697,7 @@ public class MasterService extends AbstractLifecycleComponent {
                     return;
                 }
                 final var finalTaskCount = taskCount;
-                ActionListener.run(ActionListener.runBefore(listener, () -> { // 再回调listener之前，先执行runBefore方法的第二个参数
+                ActionListener.run(ActionListener.runBefore(listener, () -> { //在回调listener之前，先执行runBefore方法的第二个参数
                     assert executing.size() == finalTaskCount;
                     executing.clear();
                     // 将批量任务tasks传递给executeAndPublishBatch方法处理

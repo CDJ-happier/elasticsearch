@@ -170,7 +170,7 @@ final class BulkOperation extends ActionRunnable<BulkResponse> {
         assert bulkRequest != null;
         final ClusterState clusterState = observer.setAndGetObservedState();
         if (handleBlockExceptions(clusterState, BulkOperation.this, this::onFailure)) {
-            return;
+            return; // 如果没有block，则进入到下面executeBulkRequestByShard；如果有则再之后无block时重试this；如果超时则onFailure
         }
         Map<ShardId, List<BulkItemRequest>> requestsByShard = groupBulkRequestsByShards(clusterState);
         executeBulkRequestsByShard(requestsByShard, clusterState, this::redirectFailuresOrCompleteBulkOperation);
@@ -304,17 +304,19 @@ final class BulkOperation extends ActionRunnable<BulkResponse> {
                 ia = concreteIndices.resolveIfAbsent(docWriteRequest);
                 indexOperationValidator.accept(ia, docWriteRequest);
 
-                TransportBulkAction.prohibitCustomRoutingOnDataStream(docWriteRequest, ia);
+                TransportBulkAction.prohibitCustomRoutingOnDataStream(docWriteRequest, ia); // 条件判断
                 TransportBulkAction.prohibitAppendWritesInBackingIndices(docWriteRequest, ia);
+                // 解析索引的routing
                 docWriteRequest.routing(metadata.resolveWriteIndexRouting(docWriteRequest.routing(), docWriteRequest.index()));
 
                 final Index concreteIndex = docWriteRequest.getConcreteWriteIndex(ia, metadata);
                 if (addFailureIfIndexIsClosed(docWriteRequest, concreteIndex, bulkItemRequest.id(), metadata)) {
                     continue;
                 }
+                // 为concreteIndex获取路由策略，IndexRouting有四种实现，比如ExtractFromSource, IdAndRoutingOnly, etc.
                 IndexRouting indexRouting = concreteIndices.routing(concreteIndex);
-                docWriteRequest.process(indexRouting);
-                int shardId = docWriteRequest.route(indexRouting);
+                docWriteRequest.process(indexRouting); // 调用indexRouting.process(docWriteRequest);
+                int shardId = docWriteRequest.route(indexRouting); // NOTE: 这里根据routing、id以及其它参数生成shardId，也就是路由算法。
                 List<BulkItemRequest> shardRequests = requestsByShard.computeIfAbsent(
                     new ShardId(concreteIndex, shardId),
                     shard -> new ArrayList<>()
@@ -382,6 +384,7 @@ final class BulkOperation extends ActionRunnable<BulkResponse> {
                 final ShardId shardId = entry.getKey();
                 final List<BulkItemRequest> requests = entry.getValue();
 
+                // 这里是针对每个分片构建一个BulkShardRequest
                 BulkShardRequest bulkShardRequest = new BulkShardRequest(
                     shardId,
                     bulkRequest.getRefreshPolicy(),
@@ -865,7 +868,7 @@ final class BulkOperation extends ActionRunnable<BulkResponse> {
         IndexAbstraction resolveIfAbsent(DocWriteRequest<?> request) {
             try {
                 IndexAbstraction indexAbstraction = indexAbstractions.get(request.index());
-                if (indexAbstraction == null) {
+                if (indexAbstraction == null) { // 这里indexAbstraction类似一个缓存，如果不存在就去获取并更新。
                     indexAbstraction = indexNameExpressionResolver.resolveWriteIndexAbstraction(state, request);
                     indexAbstractions.put(request.index(), indexAbstraction);
                 }

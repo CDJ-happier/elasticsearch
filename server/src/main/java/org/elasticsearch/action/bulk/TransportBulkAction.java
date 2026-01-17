@@ -257,6 +257,7 @@ public class TransportBulkAction extends TransportAbstractBulkAction {
      * Determine all the targets (i.e. indices, data streams, failure stores) that require an action before we can proceed with the bulk
      * request. Indices might need to be created, and data streams and failure stores might need to be rolled over when they're marked
      * for lazy rollover.
+     * 在我们能够继续处理bulk请求前确定所有需要action的目标（即索引，数据流，失败存储），比如索引可能需要被创建，数据流和失败存储可能需要被懒惰滚动
      *
      * @param bulkRequest the bulk request
      * @param indicesToAutoCreate a map of index names to their creation request that need to be auto-created
@@ -273,6 +274,7 @@ public class TransportBulkAction extends TransportAbstractBulkAction {
         ClusterState state = clusterService.state();
         // A map for memorizing which indices exist.
         Map<String, Boolean> indexExistence = new HashMap<>();
+        // 给定一个索引名，判断它是否存在
         Function<String, Boolean> indexExistenceComputation = (index) -> indexNameExpressionResolver.hasIndexAbstraction(index, state);
         boolean lazyRolloverFeature = featureService.clusterHasFeature(state, LazyRolloverAction.DATA_STREAM_LAZY_ROLLOVER);
         boolean lazyRolloverFailureStoreFeature = DataStream.isFailureStoreFeatureFlagEnabled();
@@ -286,17 +288,19 @@ public class TransportBulkAction extends TransportAbstractBulkAction {
                 continue;
             }
             boolean writeToFailureStore = request instanceof IndexRequest indexRequest && indexRequest.isWriteToFailureStore();
+            // 如果索引名request.index()不存在于indexExistence中（即还没计算存在性），就计算并记录
             boolean indexExists = indexExistence.computeIfAbsent(request.index(), indexExistenceComputation);
             if (indexExists == false) {
                 // We should only auto-create an index if _none_ of the requests are requiring it to be an alias.
                 if (request.isRequireAlias()) {
+                    // TODO：这里应该是如果请求中要求该索引是一个别名，则不能自动创建（因为这不是索引，是索引别名）
                     // Remember that this request required this index to be an alias.
                     if (indicesThatRequireAlias.add(request.index())) {
                         // If we didn't already know that, we remove the index from the list of indices to create (if present).
-                        indicesToAutoCreate.remove(request.index());
+                        indicesToAutoCreate.remove(request.index()); // 同时从indicesToAutoCreate中移除
                     }
-                } else if (indicesThatRequireAlias.contains(request.index()) == false) {
-                    CreateIndexRequest createIndexRequest = indicesToAutoCreate.get(request.index());
+                } else if (indicesThatRequireAlias.contains(request.index()) == false) { // 如果请求中没有要求该索引是一个别名
+                    CreateIndexRequest createIndexRequest = indicesToAutoCreate.get(request.index()); // 则需要自动创建索引
                     // Create a new CreateIndexRequest if we didn't already have one.
                     if (createIndexRequest == null) {
                         createIndexRequest = new CreateIndexRequest(request.index()).cause("auto(bulk api)")
@@ -370,6 +374,7 @@ public class TransportBulkAction extends TransportAbstractBulkAction {
                 executeBulk(task, bulkRequest, startTimeNanos, listener, executor, responses);
             }
         });
+        // refs在初始化时本身会增加一个引用计数，在离开try-with-resources时会自动减少一个引用计数，当引用计数为0时会执行executeBulkRunnable
         try (RefCountingRunnable refs = new RefCountingRunnable(executeBulkRunnable)) {
             createIndices(indicesToAutoCreate, refs, indicesExceptions);
             rollOverDataStreams(bulkRequest, dataStreamsToBeRolledOver, false, refs, dataStreamExceptions);
@@ -396,7 +401,7 @@ public class TransportBulkAction extends TransportAbstractBulkAction {
                         indicesExceptions.put(index, e);
                     }
                 }
-            }, refs.acquire()));
+            }, refs.acquire())); // 这里先获取一个引用计数，返回的是Releasable，通过releaseAfter在执行完成后自动释放
         }
     }
 

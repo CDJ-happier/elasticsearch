@@ -251,9 +251,14 @@ public abstract class TransportMasterNodeAction<Request extends MasterNodeReques
                     } else {
                         DiscoveryNode masterNode = nodes.getMasterNode();
                         logger.trace("forwarding request [{}] to master [{}]", actionName, masterNode);
+                        // TransportMasterNodeAction继承自HandledTransportAction, 该基类会调用transportService.registerRequestHandler()
+                        // 注册对应的actionName和TransportXXXAction。这里通过transportService.sendRequest()向masterNode发送actionName请求，
+                        // 最终会到masterNode的TransportXXXAction的doExecute()方法，
+                        // 比如AutoCreateAction.masterOperation() -> TransportMasterNodeAction.doExecute()
+                        // 即又回到了上面的本地节点是master的分支逻辑。
                         transportService.sendRequest(
                             masterNode,
-                            actionName,
+                            actionName, // 因为TransportMasterNode有多个子类，这里actionName是子类定义的。比如AutoCreateAction。
                             new TermOverridingMasterNodeRequest(request, clusterState.term()),
                             new ActionListenerResponseHandler<>(listener, responseReader, executor) {
                                 @Override

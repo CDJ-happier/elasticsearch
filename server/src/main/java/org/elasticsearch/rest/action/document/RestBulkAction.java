@@ -90,7 +90,7 @@ public class RestBulkAction extends BaseRestHandler {
 
     @Override
     public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
-        if (request.isStreamedContent() == false) {
+        if (request.isStreamedContent() == false) { // 是否是流式内容
             if (request.getRestApiVersion() == RestApiVersion.V_7 && request.hasParam("type")) {
                 request.param("type");
             }
@@ -135,6 +135,8 @@ public class RestBulkAction extends BaseRestHandler {
             String waitForActiveShards = request.param("wait_for_active_shards");
             TimeValue timeout = request.paramAsTime("timeout", BulkShardRequest.DEFAULT_TIMEOUT);
             String refresh = request.param("refresh");
+            // 这里最终也会调用到client.bulk(request, listener), 和上面非流式分支一样。
+            // TODO：理解这里如何通过ChunkHandler处理流式请求的
             return new ChunkHandler(allowExplicitIndex, request, () -> bulkHandler.newBulkRequest(waitForActiveShards, timeout, refresh));
         }
     }

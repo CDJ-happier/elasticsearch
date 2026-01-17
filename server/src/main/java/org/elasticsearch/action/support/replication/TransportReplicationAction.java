@@ -461,7 +461,7 @@ public abstract class TransportReplicationAction<
                     throw blockException;
                 }
 
-                if (primaryShardReference.isRelocated()) {
+                if (primaryShardReference.isRelocated()) { // 显然该分支的概率比较小
                     primaryShardReference.close(); // release shard operation lock as soon as possible
                     setPhase(replicationTask, "primary_delegation");
                     // delegate primary phase to relocation target
@@ -472,7 +472,7 @@ public abstract class TransportReplicationAction<
                     final Writeable.Reader<Response> reader = TransportReplicationAction.this::newResponseInstance;
                     DiscoveryNode relocatingNode = clusterState.nodes().get(primary.relocatingNodeId());
                     transportService.sendRequest(
-                        relocatingNode,
+                        relocatingNode, // 主分片relocate到其它节点了，这里重新发起请求
                         transportPrimaryAction,
                         new ConcreteShardRequest<>(
                             primaryRequest.getRequest(),
@@ -904,6 +904,8 @@ public abstract class TransportReplicationAction<
                 if (primary.currentNodeId().equals(state.nodes().getLocalNodeId())) {
                     performLocalAction(state, primary, node, indexMetadata);
                 } else {
+                    // 这里会向主分片节点发起该实际action类的请求，到达对应节点后执行TransportXXXAction.doExecute() -> ... ->
+                    // 然后就回到了 if 分支的performLocalAction().
                     performRemoteAction(state, primary, node);
                 }
             }

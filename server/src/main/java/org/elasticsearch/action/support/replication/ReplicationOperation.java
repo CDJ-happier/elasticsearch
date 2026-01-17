@@ -124,19 +124,23 @@ public class ReplicationOperation<
 
         totalShards.incrementAndGet();
         pendingActions.incrementAndGet(); // increase by 1 until we finish all primary coordination
+        // 这里会执行TransportReplicationAction.perform()，成功后回调handlePrimaryResult。
         primary.perform(request, ActionListener.wrap(this::handlePrimaryResult, this::finishAsFailed));
     }
 
     private void handlePrimaryResult(final PrimaryResultT primaryResult) {
         this.primaryResult = primaryResult;
         final ReplicaRequest replicaRequest = primaryResult.replicaRequest();
-        if (replicaRequest != null) {
+        if (replicaRequest != null) { // 在primary上成功后，主分片会向所有副本分片发送请求
             if (logger.isTraceEnabled()) {
                 logger.trace("[{}] op [{}] completed on primary for request [{}]", primary.routingEntry().shardId(), opType, request);
             }
             final ReplicationGroup replicationGroup = primary.getReplicationGroup();
 
             pendingActions.incrementAndGet();
+            // 这里通过ReplicasProxy.onPrimaryOperationComplete()向所有副本分片发送请求（这里不是，应该只是做一些处理）
+            // 末尾的performOnReplicas才是向所有副本分片发送请求
+            // TODO：所以这里是在干什么？
             replicasProxy.onPrimaryOperationComplete(
                 replicaRequest,
                 replicationGroup.getRoutingTable(),
@@ -169,7 +173,7 @@ public class ReplicationOperation<
             final long maxSeqNoOfUpdatesOrDeletes = primary.maxSeqNoOfUpdatesOrDeletes();
             assert maxSeqNoOfUpdatesOrDeletes != SequenceNumbers.UNASSIGNED_SEQ_NO : "seqno_of_updates still uninitialized";
             final PendingReplicationActions pendingReplicationActions = primary.getPendingReplicationActions();
-            markUnavailableShardsAsStale(replicaRequest, replicationGroup);
+            markUnavailableShardsAsStale(replicaRequest, replicationGroup); // NOTE：将不可用的分片标记为过时
             performOnReplicas(replicaRequest, globalCheckpoint, maxSeqNoOfUpdatesOrDeletes, replicationGroup, pendingReplicationActions);
         }
         primaryResult.runPostReplicationActions(new ActionListener<>() {
