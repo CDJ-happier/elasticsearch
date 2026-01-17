@@ -154,13 +154,15 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
         performOnPrimary(request, primary, updateHelper, threadPool::absoluteTimeInMillis, (update, shardId, mappingListener) -> {
             assert update != null;
             assert shardId != null;
-            // 更新mapping
+            // 更新mapping，完成后调用mappingListener.onResponse() -> waitForMappingUpdate.accept(listener, version) ->
+            // observer.waitForNextChange() -> mappingUpdateListener.onResponse(null) -> 重置context进行一下轮的perform
             mappingUpdatedAction.updateMappingOnMaster(shardId.getIndex(), update, mappingListener);
-            // 这里waitForNextChange等待mapping更新完成
+            // 这里是一个函数式接口waitForMappingUpdate，接收两个参数，一个是listener，一个是initialMappingVersion。
+            // 在执行waitForNextChange成功后会进行相应回调，从而回调mappingUpdateListener的相应onXXX方法
         }, (mappingUpdateListener, initialMappingVersion) -> observer.waitForNextChange(new ClusterStateObserver.Listener() {
             @Override
             public void onNewClusterState(ClusterState state) {
-                mappingUpdateListener.onResponse(null);
+                mappingUpdateListener.onResponse(null); // 当有新的集群状态时，回调mappingUpdateListener的onResponse方法
             }
 
             @Override
@@ -232,6 +234,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
 
             final long startBulkTime = System.nanoTime();
 
+            // NOTE：当Mapping更新完成后（onMappingUpdateDone被回调时），会执行this，也就是doRun
             private final ActionListener<Void> onMappingUpdateDone = ActionListener.wrap(v -> executor.execute(this), this::onRejection);
 
             @Override
@@ -248,6 +251,11 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                     ) == false) {
                         // We are waiting for a mapping update on another thread, that will invoke this action again once its done
                         // so we just break out here.
+                        // 返回false说明内部发现需要更新mapping，通过mappingUpdater.updateMappings() -> mappingUpdatedAction.updateMappingOnMaster()
+                        // 发起更新mapping的请求。然后执行waitForMappingUpdate.accept(listener, version)等待更新完成，mapping更新完成后回调
+                        // listener -> 重置context.resetForMappingUpdateRetry() -> onMappingUpdateDone.onResponse(null)
+                        // -> executor.execute(this) 重新开始执行。这里即执行 bulk -> 发现需要mapping更新 -> 发起异步更新并立即返回 -> 更新完成后 ->
+                        // 重置context并执行 这里的doRun方法
                         return;
                     }
                     assert context.isInitial(); // either completed and moved to next or reset
@@ -293,8 +301,8 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
 
             private void finishRequest() {
                 ActionListener.completeWith(
-                    listener,
-                    () -> new WritePrimaryResult<>(
+                    listener, // NOTE：这个listener对应ReplicationOperation.handlePrimaryResult()回调，会将主节点处理的请求发送给所有副本节点。
+                    () -> new WritePrimaryResult<>( // 这个作为listener的参数，即主节点的写入结果，包括请求，响应等。
                         context.getBulkShardRequest(),
                         context.buildShardResponse(),
                         context.getLocationToSync(),
@@ -326,7 +334,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
 
         // Translate update requests into index or delete requests which can be executed directly
         final UpdateHelper.Result updateResult;
-        if (opType == DocWriteRequest.OpType.UPDATE) {
+        if (opType == DocWriteRequest.OpType.UPDATE) { // 将update请求转换为index或delete请求
             final UpdateRequest updateRequest = (UpdateRequest) context.getCurrent();
             try {
                 updateResult = updateHelper.prepare(updateRequest, context.getPrimary(), nowInMillisSupplier);
@@ -450,6 +458,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                     public void onFailure(Exception e) {
                         context.failOnMappingUpdate(e);
                     }
+                    // 这里调用itemDoneListener.onResponse(null)会触发重新执行doRun方法，也就是mapping更新完成了，继续执行bulk请求。
                 }, () -> itemDoneListener.onResponse(null)), initialMappingVersion);
             }
 
@@ -461,7 +470,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                 itemDoneListener.onResponse(null);
             }
         });
-        return false;
+        return false; // 表示有mapping需要更新
     }
 
     private static Engine.Result exceptionToResult(Exception e, IndexShard primary, boolean isDelete, long version, String id) {
