@@ -32,8 +32,8 @@ public abstract class Publication {
 
     protected final Logger logger = LogManager.getLogger(getClass());
 
-    private final List<PublicationTarget> publicationTargets;
-    private final PublishRequest publishRequest;
+    private final List<PublicationTarget> publicationTargets; // 每个target对应一个节点
+    private final PublishRequest publishRequest; // 所有节点共用相同的publishRequest
     private final AckListener ackListener;
     private final LongSupplier currentTimeSupplier;
     private final long startTime;
@@ -49,6 +49,7 @@ public abstract class Publication {
         startTime = currentTimeSupplier.getAsLong();
         applyCommitRequest = Optional.empty();
         publicationTargets = new ArrayList<>(publishRequest.getAcceptedState().getNodes().getNodes().size());
+        // 初始化publicationTargets
         publishRequest.getAcceptedState().getNodes().mastersFirstStream().forEach(n -> publicationTargets.add(new PublicationTarget(n)));
     }
 
@@ -59,7 +60,7 @@ public abstract class Publication {
             onFaultyNode(faultyNode);
         }
         onPossibleCommitFailure();
-        publicationTargets.forEach(PublicationTarget::sendPublishRequest);
+        publicationTargets.forEach(PublicationTarget::sendPublishRequest); // 向每个节点发送起状态更新
     }
 
     public void cancel(String reason) {
@@ -267,13 +268,14 @@ public abstract class Publication {
                 sendApplyCommit();
             } else {
                 try {
+                    // 处理该节点后判断是否达到了多数，有就发送apply commit
                     Publication.this.handlePublishResponse(discoveryNode, publishResponse).ifPresent(applyCommit -> {
                         assert applyCommitRequest.isPresent() == false;
                         applyCommitRequest = Optional.of(applyCommit);
                         ackListener.onCommit(TimeValue.timeValueMillis(currentTimeSupplier.getAsLong() - startTime));
                         publicationTargets.stream()
-                            .filter(PublicationTarget::isWaitingForQuorum)
-                            .forEach(PublicationTarget::sendApplyCommit);
+                            .filter(PublicationTarget::isWaitingForQuorum) // 所有等待quorum的节点
+                            .forEach(PublicationTarget::sendApplyCommit); // 发送apply commit（二阶段提交）
                     });
                 } catch (Exception e) {
                     setFailed(e);
@@ -355,6 +357,10 @@ public abstract class Publication {
             return state == PublicationTargetState.FAILED;
         }
 
+        /**
+         * 处理publish response，本质调用PublicationTarget.handlePublishResponse。这里是发布的第一个阶段，处理节点的publish response。
+         * ApplyCommitResponseHandler是发布的第二个阶段，处理节点的apply commit response。
+         */
         private class PublishResponseHandler implements ActionListener<PublishWithJoinResponse> {
 
             @Override
@@ -377,7 +383,7 @@ public abstract class Publication {
                 }
 
                 assert state == PublicationTargetState.SENT_PUBLISH_REQUEST : state + " -> " + PublicationTargetState.WAITING_FOR_QUORUM;
-                state = PublicationTargetState.WAITING_FOR_QUORUM;
+                state = PublicationTargetState.WAITING_FOR_QUORUM; // 进入等待quorum的状态
                 handlePublishResponse(response.getPublishResponse());
 
                 assert publicationCompletedIffAllTargetsInactiveOrCancelled();

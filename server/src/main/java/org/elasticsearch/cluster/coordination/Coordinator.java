@@ -432,6 +432,7 @@ public class Coordinator extends AbstractLifecycleComponent implements ClusterSt
         }
     }
 
+    // 处理publish请求
     PublishWithJoinResponse handlePublishRequest(PublishRequest publishRequest) {
         assert ThreadPool.assertCurrentThreadPool(Names.CLUSTER_COORDINATION);
         assert publishRequest.getAcceptedState().nodes().getLocalNode().equals(getLocalNode())
@@ -1553,7 +1554,7 @@ public class Coordinator extends AbstractLifecycleComponent implements ClusterSt
                     );
                 }
 
-                if (currentPublication.isPresent()) {
+                if (currentPublication.isPresent()) { // 发布中，这里使用了互斥锁，一般不会走到这里
                     assert false : "[" + currentPublication.get() + "] in progress, cannot start new publication";
                     logger.error(
                         () -> format(

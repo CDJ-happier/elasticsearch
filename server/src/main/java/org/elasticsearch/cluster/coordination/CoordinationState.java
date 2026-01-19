@@ -443,13 +443,14 @@ public class CoordinationState {
             publishResponse.getTerm(),
             sourceNode
         );
-        publishVotes.addVote(sourceNode);
-        if (isPublishQuorum(publishVotes)) {
+        publishVotes.addVote(sourceNode); // 收到一个对publish request的响应
+        if (isPublishQuorum(publishVotes)) { // 判断是否满足quorum
             logger.trace(
                 "handlePublishResponse: value committed for version [{}] and term [{}]",
                 publishResponse.getVersion(),
                 publishResponse.getTerm()
             );
+            // NOTE：达到了quorum，可以commit了（集群状态变更的第二个阶段），即通知节点可以应用之前收到的集群状态了
             return Optional.of(new ApplyCommitRequest(localNode, publishResponse.getTerm(), publishResponse.getVersion()));
         }
 
@@ -508,7 +509,7 @@ public class CoordinationState {
         );
 
         assert getLastAcceptedTerm() == applyCommit.getTerm() && getLastAcceptedVersion() == applyCommit.getVersion();
-        persistedState.markLastAcceptedStateAsCommitted();
+        persistedState.markLastAcceptedStateAsCommitted(); // NOTE：将第一阶段收到的集群状态标记为已commit（当前是第二个阶段）
         assert getLastCommittedConfiguration().equals(getLastAcceptedConfiguration());
     }
 

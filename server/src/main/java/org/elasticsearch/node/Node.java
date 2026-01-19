@@ -313,6 +313,8 @@ public class Node implements Closeable {
 
         injector.getInstance(GatewayService.class).start();
         final Coordinator coordinator = injector.getInstance(Coordinator.class);
+        // 这里注册了masterService发布集群状态的方法，对应
+        // MasterService.publish() -> clusterStatePublisher.publish() -> Coordinator.publish()
         clusterService.getMasterService().setClusterStatePublisher(coordinator);
 
         // Start the transport service now so the publish address will be added to the local disco node in ClusterService

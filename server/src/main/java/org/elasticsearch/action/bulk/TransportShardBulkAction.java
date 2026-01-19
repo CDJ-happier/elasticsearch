@@ -162,7 +162,9 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
         }, (mappingUpdateListener, initialMappingVersion) -> observer.waitForNextChange(new ClusterStateObserver.Listener() {
             @Override
             public void onNewClusterState(ClusterState state) {
-                mappingUpdateListener.onResponse(null); // 当有新的集群状态时，回调mappingUpdateListener的onResponse方法
+                // 当有新的集群状态时，回调mappingUpdateListener的onResponse方法
+                // 而mappingUpdateListener会更新context以及重新执行索引操作
+                mappingUpdateListener.onResponse(null); // 没有数据需要传递，只是一个集群状态已更新的信号
             }
 
             @Override
@@ -174,7 +176,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
             public void onTimeout(TimeValue timeout) {
                 mappingUpdateListener.onFailure(new MapperException("timed out while waiting for a dynamic mapping update"));
             }
-        }, clusterState -> {
+        }, clusterState -> { // 这里是谓语，当这个为true时才会执行onNewClusterState的回调。这里其实就是判断mappingVersion已经更新了
             var indexMetadata = clusterState.metadata().index(primary.shardId().getIndex());
             return indexMetadata == null || (indexMetadata.mapping() != null && indexMetadata.getMappingVersion() != initialMappingVersion);
         }), listener, executor(primary), postWriteRefresh, postWriteAction, documentParsingProvider);
@@ -205,9 +207,9 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
             primary,
             updateHelper,
             nowInMillisSupplier,
-            mappingUpdater,
-            waitForMappingUpdate,
-            listener,
+            mappingUpdater, // 当在索引request请求过程中，发现需要更新mapping时，会调用该函数
+            waitForMappingUpdate, // 然后调用该函数等待mapping更新完成
+            listener, // 这个listener是完成主分片的操作后别回调，将主分片上的操作都在所有副本分片上都执行一遍
             executor,
             null,
             null,
@@ -443,6 +445,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
             return true;
         }
 
+        // 这里应该是异步调用的吧？执行后直接返回false，然后等待mapping更新完成回调再重新执行索引操作，即执行doRun
         mappingUpdater.updateMappings(result.getRequiredMappingUpdate(), primary.shardId(), new ActionListener<>() {
             @Override
             public void onResponse(Void v) {

@@ -121,7 +121,7 @@ public class MetadataMappingService {
                         taskContext.onFailure(e);
                     }
                 }
-                return currentState; // 返回新的集群状态，并触发集群状态发布（Master节点的ClusterService负责）
+                return currentState; // 返回新的集群状态，并触发集群状态发布（Master节点的MasterService负责）
             } finally {
                 IOUtils.close(indexMapperServices.values());
             }

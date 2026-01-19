@@ -337,7 +337,7 @@ public class MasterService extends AbstractLifecycleComponent {
         } else {
             logger.debug("cluster state updated, version [{}], source [{}]", newClusterState.version(), summary);
         }
-        // 封装发布时间用于节点间通信
+        // 封装发布事件用于节点间通信
         final ClusterStatePublicationEvent clusterStatePublicationEvent = new ClusterStatePublicationEvent(
             summary,
             previousClusterState,
@@ -373,6 +373,7 @@ public class MasterService extends AbstractLifecycleComponent {
                     .map(ExecutionResult::getContextPreservingAckListener)
                     .filter(Objects::nonNull)
                     .map(
+                        // 包装任务确认监听器
                         contextPreservingAckListener -> new TaskAckListener(
                             contextPreservingAckListener,
                             newClusterState.version(),
@@ -380,14 +381,14 @@ public class MasterService extends AbstractLifecycleComponent {
                             threadPool
                         )
                     )
-                    .toList()
+                    .toList() // 包装任务确认监听器 -> CompositeTaskAckListener
             ),
             ActionListener.runAfter(new ActionListener<>() {
                 @Override
                 public void onResponse(Void unused) {
                     final long notificationStartTime = threadPool.rawRelativeTimeInMillis();
                     for (final var executionResult : executionResults) {
-                        executionResult.onPublishSuccess(newClusterState);
+                        executionResult.onPublishSuccess(newClusterState);  // executionResult对应submitTask的一个task
                     }
 
                     try {
@@ -408,7 +409,7 @@ public class MasterService extends AbstractLifecycleComponent {
                             + ')',
                         summary
                     );
-                    clusterStateUpdateStatsTracker.onPublicationSuccess(
+                    clusterStateUpdateStatsTracker.onPublicationSuccess( // 更新统计信息
                         threadPool.rawRelativeTimeInMillis(),
                         clusterStatePublicationEvent,
                         executionTime.millis()
@@ -464,7 +465,7 @@ public class MasterService extends AbstractLifecycleComponent {
             }, new Runnable() {
                 @Override
                 public void run() {
-                    listener.onResponse(null);
+                    listener.onResponse(null); // 这个listener是taskManager相关，通知注销
                 }
 
                 @Override
@@ -516,6 +517,60 @@ public class MasterService extends AbstractLifecycleComponent {
         );
     }
 
+    /**
+     * Patches version numbers into the new cluster state.
+     *
+     * <h2>核心作用</h2>
+     * <p>
+     * 该方法负责为新的集群状态（ClusterState）和元数据（Metadata）递增版本号。
+     * 这是 Master 节点在发布集群状态更新之前的关键步骤，确保每次状态变更都有唯一的版本标识。
+     * </p>
+     *
+     * <h2>输入与输出</h2>
+     * <ul>
+     * <li><b>previousClusterState</b>: 上一个集群状态，用于判断状态是否发生了变化</li>
+     * <li><b>newClusterState</b>: 任务执行器（Executor）计算出的新集群状态</li>
+     * <li><b>返回值</b>: 带有递增版本号的新集群状态。如果状态未变化，则直接返回原状态</li>
+     * </ul>
+     *
+     * <h2>使用场景</h2>
+     * <p>
+     * 该方法在集群状态更新流程的核心路径中被调用（见 executeTasks 方法第245行）：
+     * </p>
+     * <ol>
+     * <li>Master 节点执行批量任务（executeTasks），计算出新的集群状态</li>
+     * <li>调用 patchVersions 为新状态打上版本号</li>
+     * <li>将带版本号的状态发布到集群中的所有节点</li>
+     * </ol>
+     * <p>
+     * 版本号的作用：
+     * </p>
+     * <ul>
+     * <li>帮助节点识别状态的新旧程度，避免应用过期的状态</li>
+     * <li>用于冲突检测和状态同步</li>
+     * <li>便于调试和追踪状态变更历史</li>
+     * </ul>
+     *
+     * <h2>关键逻辑</h2>
+     * <ol>
+     * <li><b>状态变化检测</b>: 通过对象引用比较（previousClusterState != newClusterState）判断状态是否真正发生了变化</li>
+     * <li><b>集群状态版本递增</b>: 调用 incrementVersion() 为整个集群状态的版本号加1</li>
+     * <li><b>元数据版本递增</b>: 如果元数据对象也发生了变化（previousClusterState.metadata() != newClusterState.metadata()），
+     * 则额外为元数据版本号加1。这是因为元数据有独立的版本控制</li>
+     * <li><b>索引查找表一致性检查</b>: 通过断言确保版本递增操作不会破坏索引查找表（IndicesLookup）的一致性</li>
+     * </ol>
+     *
+     * <h2>异常与边界</h2>
+     * <ul>
+     * <li>该方法假设只有 Master 节点会调用它（注释："only the master controls the version numbers"）</li>
+     * <li>如果状态未变化（对象引用相同），则直接返回原状态，不做任何版本递增</li>
+     * <li>使用断言检查索引查找表的一致性，在生产环境中如果断言失败会抛出 AssertionError</li>
+     * </ul>
+     *
+     * @param previousClusterState 上一个集群状态
+     * @param newClusterState 新计算出的集群状态
+     * @return 带有递增版本号的集群状态，如果状态未变化则返回原状态
+     */
     private ClusterState patchVersions(ClusterState previousClusterState, ClusterState newClusterState) {
         if (previousClusterState != newClusterState) {
             // only the master controls the version numbers
@@ -1076,6 +1131,8 @@ public class MasterService extends AbstractLifecycleComponent {
 
             try {
                 final var updatedState = executor.execute( // 这里就是创建BatchingTaskQueue时的executor了，具体逻辑不在此处。
+                    // 在各个与集群任务相关的服务中，比如MetadataMappingService.createTaskQueue()时指定的mapping更新executor -> PutMappingExecutor
+                    // 执行后返回一个新的集群状态即可（TODO：会实际更新集群状态？还只是预演，后续判断再提交？）。
                     new ClusterStateTaskExecutor.BatchExecutionContext<>(
                         previousClusterState,
                         executionResults,
