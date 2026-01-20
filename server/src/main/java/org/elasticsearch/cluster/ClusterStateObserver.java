@@ -165,9 +165,10 @@ public class ClusterStateObserver {
             // good enough, let's go.
             logger.trace("observer: sampled state accepted by predicate ({})", newState);
             lastObservedVersion = newState.version();
-            listener.onNewClusterState(newState);
+            listener.onNewClusterState(newState); // 如果此时已经满足条件，则直接调用listener
         } else {
             logger.trace("observer: sampled state rejected by predicate ({}). adding listener to ClusterService", newState);
+            // 否则，将监听器注册到ClusterApplierService中
             final ObservingContext context = new ObservingContext(listener, statePredicate);
             if (observingContext.compareAndSet(null, context) == false) {
                 throw new ElasticsearchException("already waiting for a cluster state change");

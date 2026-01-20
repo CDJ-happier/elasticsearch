@@ -149,6 +149,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
         IndexShard primary,
         ActionListener<PrimaryResult<BulkShardRequest, BulkShardResponse>> listener
     ) {
+        // 创建一个集群状态观察者，用于监听集群状态的变化
         ClusterStateObserver observer = new ClusterStateObserver(clusterService, request.timeout(), logger, threadPool.getThreadContext());
         // 注意，第5个参数是mappingUpdater，在后续会判断是否动态更新mapping，如果需要会回调，然后发布集群状态
         performOnPrimary(request, primary, updateHelper, threadPool::absoluteTimeInMillis, (update, shardId, mappingListener) -> {

@@ -853,6 +853,8 @@ public class MasterService extends AbstractLifecycleComponent {
 
     /**
      * A wrapper around the collection of {@link TaskAckListener}s for a publication.
+     * 因为MasterService是批量执行任务的，因此一次状态发布时涉及多个submitTask的任务。一个任务对应一个TaskAckListener，
+     * 这里通过CompositeTaskAckListener来包装这些TaskAckListener，以便在一次状态发布后通知所有的TaskAckListener
      */
     private record CompositeTaskAckListener(List<TaskAckListener> listeners) implements ClusterStatePublisher.AckListener {
 

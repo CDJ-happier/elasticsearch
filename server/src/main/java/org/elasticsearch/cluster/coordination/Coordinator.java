@@ -1869,15 +1869,16 @@ public class Coordinator extends AbstractLifecycleComponent implements ClusterSt
         private final List<Join> receivedJoins = new ArrayList<>();
         private boolean receivedJoinsProcessed;
 
-        CoordinatorPublication(
+        CoordinatorPublication( // 继承自 Publication 抽象发布类
             ClusterStatePublicationEvent clusterStatePublicationEvent,
             PublishRequest publishRequest,
             PublicationTransportHandler.PublicationContext publicationContext,
             ListenableFuture<Void> localNodeAckEvent,
             AckListener ackListener,
-            ActionListener<Void> publishListener
+            ActionListener<Void> publishListener // 这个应该是一阶段时的回调
         ) {
-            super(publishRequest, new AckListener() {
+            super(publishRequest, new AckListener() { // 这个是二阶段各节点提交状态后响应给主节点时，主节点的回调
+                // 本质是调用MasterService传递过来的 CompositeTaskAckListener （一次状态发布可能涉及多次submitTask提交的任务，批量执行）
                 @Override
                 public void onCommit(TimeValue commitTime) {
                     clusterStatePublicationEvent.setPublicationCommitElapsedMillis(commitTime.millis());
