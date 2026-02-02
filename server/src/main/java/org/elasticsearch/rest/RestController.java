@@ -82,7 +82,7 @@ public class RestController implements HttpServerTransport.Dispatcher {
     private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RestController.class);
     /**
      * list of browser safelisted media types - not allowed on Content-Type header
-     * https://fetch.spec.whatwg.org/#cors-safelisted-request-header
+     * <a href="https://fetch.spec.whatwg.org/#cors-safelisted-request-header">https://fetch.spec.whatwg.org/#cors-safelisted-request-header</a>
      */
     static final Set<String> SAFELISTED_MEDIA_TYPES = Set.of("application/x-www-form-urlencoded", "multipart/form-data", "text/plain");
 

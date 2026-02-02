@@ -126,10 +126,10 @@ public class RootObjectMapper extends ObjectMapper {
     }
 
     private final Explicit<DateFormatter[]> dynamicDateTimeFormatters;
-    private final Explicit<Boolean> dateDetection;
-    private final Explicit<Boolean> numericDetection;
-    private final Explicit<DynamicTemplate[]> dynamicTemplates;
-    private final Map<String, RuntimeField> runtimeFields;
+    private final Explicit<Boolean> dateDetection; // 日期检测
+    private final Explicit<Boolean> numericDetection; // 数值检测
+    private final Explicit<DynamicTemplate[]> dynamicTemplates; // 动态映射模板 -> "dynamic_templates": [{}]
+    private final Map<String, RuntimeField> runtimeFields; // 运行时字段
 
     RootObjectMapper(
         String name,

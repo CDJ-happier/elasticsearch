@@ -38,8 +38,10 @@ public final class Mapping implements ToXContentFragment {
         null
     );
 
-    private final RootObjectMapper root;
-    private final Map<String, Object> meta;
+    private final RootObjectMapper root; // 文档中的字段 -> mappings.properties.json
+    private final Map<String, Object> meta; // 用户自定义元数据 -> mappings._meta.json
+    // e.g., _id, _source, _routing, _index, _version, _seq_no, etc.
+    // IdFieldMapper, SourceFieldMapper, RoutingFieldMapper, IndexFieldMapper, VersionFieldMapper, SeqNoFieldMapper, etc.
     private final MetadataFieldMapper[] metadataMappers;
     private final Map<Class<? extends MetadataFieldMapper>, MetadataFieldMapper> metadataMappersMap;
     private final Map<String, MetadataFieldMapper> metadataMappersByName;

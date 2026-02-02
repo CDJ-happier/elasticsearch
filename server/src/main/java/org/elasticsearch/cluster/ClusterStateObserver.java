@@ -35,7 +35,7 @@ public class ClusterStateObserver {
 
     public static final Predicate<ClusterState> NON_NULL_MASTER_PREDICATE = state -> state.nodes().getMasterNode() != null;
 
-    private final ClusterApplierService clusterApplierService;
+    private final ClusterApplierService clusterApplierService; // 依靠该服务感知集群状态变化，从而实现等待集群状态变化
     private final ThreadPool threadPool;
     private final ThreadContext contextHolder;
     volatile TimeValue timeOutValue;
@@ -131,7 +131,7 @@ public class ClusterStateObserver {
 
         Long timeoutTimeLeftMS;
         if (timeOutValue == null) {
-            timeOutValue = this.timeOutValue;
+            timeOutValue = this.timeOutValue; // 全局的超时时间
             if (timeOutValue != null) {
                 long timeSinceStartMS = threadPool.relativeTimeInMillis() - startTimeMS;
                 timeoutTimeLeftMS = timeOutValue.millis() - timeSinceStartMS;

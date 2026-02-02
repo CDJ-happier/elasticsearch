@@ -22,7 +22,7 @@ public abstract class VersionValue implements Accountable {
     final long version;
 
     /** the seq number of the operation that last changed the associated uuid */
-    final long seqNo;
+    final long seqNo; // for CAS
     /** the term of the operation that last changed the associated uuid */
     final long term;
 
